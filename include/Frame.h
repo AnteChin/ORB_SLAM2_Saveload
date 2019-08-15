@@ -114,8 +114,8 @@ public:
     static float fy;
     static float cx;
     static float cy;
-    static float invfx;
-    static float invfy;
+    static float invfx; // 1/fx
+    static float invfy; // 1/fy
     cv::Mat mDistCoef;
 
     // Stereo baseline multiplied by fx.
@@ -187,7 +187,6 @@ public:
 
     static bool mbInitialComputations;
 
-
 private:
 
     // Undistort keypoints given OpenCV distortion parameters.
@@ -202,9 +201,9 @@ private:
     void AssignFeaturesToGrid();
 
     // Rotation, translation and camera center
-    cv::Mat mRcw;
-    cv::Mat mtcw;
-    cv::Mat mRwc;
+    cv::Mat mRcw; // Rotation matrix, world to camera coordinate system
+    cv::Mat mtcw; // Translation matrix
+    cv::Mat mRwc; // Rotation Matrix, camerato to world coordinate system
     cv::Mat mOw; //==mtwc
 };
 

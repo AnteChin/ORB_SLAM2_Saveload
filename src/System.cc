@@ -1,24 +1,42 @@
 /**
-* This file is part of ORB-SLAM2.
-*
-* Copyright (C) 2014-2016 Raúl Mur-Artal <raulmur at unizar dot es> (University of Zaragoza)
-* For more information see <https://github.com/raulmur/ORB_SLAM2>
-*
-* ORB-SLAM2 is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* ORB-SLAM2 is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
+* 系统入口:
+* 1】输入图像    得到 相机位置
+*       单目 GrabImageMonocular(im);
+*       双目 GrabImageStereo(imRectLeft, imRectRight);
+*       深度 GrabImageMonocular(imRectLeft, imRectRight);
+* 
+* 2】转换为灰度图
+*       单目 mImGray
+*       双目 mImGray, imGrayRight
+*       深度 mImGray, imDepth
+* 
+* 3】构造 帧Frame
+*       单目 未初始化  Frame(mImGray, mpIniORBextractor)
+*       单目 已初始化  Frame(mImGray, mpORBextractorLeft)
+*       双目      Frame(mImGray, imGrayRight, mpORBextractorLeft, mpORBextractorRight)
+*       深度      Frame(mImGray, imDepth,        mpORBextractorLeft)
+* 
+* 4】跟踪 Track
+*   数据流进入 Tracking线程   Tracking.cc
+* 
+* ORB-SLAM利用三个线程分别进行追踪、地图构建和闭环检测。
+一、追踪
+    ORB特征提取
+    初始姿态估计（速度估计）
+    姿态优化（Track local map，利用邻近的地图点寻找更多的特征匹配，优化姿态）
+    选取关键帧
+二、地图构建
+    加入关键帧（更新各种图）
+    验证最近加入的地图点（去除Outlier）
+    生成新的地图点（三角法）
+    局部Bundle adjustment（该关键帧和邻近关键帧，去除Outlier）
+    验证关键帧（去除重复帧）
+三、闭环检测
+    选取相似帧（bag of words）
+    检测闭环（计算相似变换（3D<->3D，存在尺度漂移，因此是相似变换），RANSAC计算内点数）
+    融合三维点，更新各种图
+    图优化（传导变换矩阵），更新地图所有点
 */
-
-
 
 #include "System.h"
 #include "Converter.h"
@@ -26,14 +44,13 @@
 #include <pangolin/pangolin.h>
 #include <iomanip>
 
-static bool has_suffix(const std::string &str, const std::string &suffix)
-{
+// 字符串搜索
+static bool has_suffix(const std::string &str, const std::string &suffix) {
     std::size_t index = str.find(suffix, str.size() - suffix.size());
     return (index != std::string::npos);
 }
 
-namespace ORB_SLAM2
-{
+namespace ORB_SLAM2 {
 
 System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor,
                const bool bUseViewer, bool is_save_map_):mSensor(sensor), is_save_map(is_save_map_), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false),
@@ -41,10 +58,8 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 {
     // Output welcome message
     cout << endl <<
-    "ORB-SLAM2 Copyright (C) 2014-2016 Raul Mur-Artal, University of Zaragoza." << endl <<
-    "This program comes with ABSOLUTELY NO WARRANTY;" << endl  <<
-    "This is free software, and you are welcome to redistribute it" << endl <<
-    "under certain conditions. See LICENSE.txt." << endl << endl;
+    "Quadcopter Drone, UC Davis" << endl <<
+    "Under certain conditions. See LICENSE.txt." << endl << endl;
 
     cout << "Input sensor was set to: ";
 
@@ -57,16 +72,14 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     //Check settings file
     cv::FileStorage fsSettings(strSettingsFile.c_str(), cv::FileStorage::READ);
-    if(!fsSettings.isOpened())
-    {
+    if(!fsSettings.isOpened()) {
        cerr << "Failed to open settings file at: " << strSettingsFile << endl;
        exit(-1);
     }
 
     cv::FileNode mapfilen = fsSettings["Map.mapfile"];
     bool bReuseMap = false;
-    if (!mapfilen.empty())
-    {
+    if (!mapfilen.empty()) {
         mapfile = (string)mapfilen;
     }
 
@@ -81,23 +94,18 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
         bVocLoad = mpVocabulary->loadFromBinaryFile(strVocFile);
     else
         bVocLoad = false;
-    if(!bVocLoad)
-    {
+    if(!bVocLoad) {
         cerr << "Wrong path to vocabulary. " << endl;
         cerr << "Falied to open at: " << strVocFile << endl;
         exit(-1);
     }
     cout << "Vocabulary loaded!" << endl << endl;
 
-
     //Create KeyFrame Database
     //Create the Map
-    if (!mapfile.empty() && LoadMap(mapfile))
-    {
+    if (!mapfile.empty() && LoadMap(mapfile)) {
         bReuseMap = true;
-    }
-    else
-    {
+    } else {
         mpKeyFrameDatabase = new KeyFrameDatabase(mpVocabulary);
         mpMap = new Map();
     }
@@ -120,8 +128,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mptLoopClosing = new thread(&ORB_SLAM2::LoopClosing::Run, mpLoopCloser);
 
     //Initialize the Viewer thread and launch
-    if(bUseViewer)
-    {
+    if(bUseViewer) {
         mpViewer = new Viewer(this, mpFrameDrawer,mpMapDrawer,mpTracker,strSettingsFile, bReuseMap);
         mptViewer = new thread(&Viewer::Run, mpViewer);
         mpTracker->SetViewer(mpViewer);
@@ -138,33 +145,35 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mpLoopCloser->SetLocalMapper(mpLocalMapper);
 }
 
-cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp)
-{
-    if(mSensor!=STEREO)
-    {
+cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp) {
+    if(mSensor!=STEREO) {
         cerr << "ERROR: you called TrackStereo but input sensor was not set to STEREO." << endl;
         exit(-1);
     }
 
     // Check mode change
     {
-        unique_lock<mutex> lock(mMutexMode);
+        unique_lock<mutex> lock(mMutexMode); // lock thread
+        // if current mode is Localization, 
+        // only track + localization, no building new map
         if(mbActivateLocalizationMode)
         {
-            mpLocalMapper->RequestStop();
+            mpLocalMapper->RequestStop(); // stop map mode
 
             // Wait until Local Mapping has effectively stopped
-            while(!mpLocalMapper->isStopped())
-            {
+            while(!mpLocalMapper->isStopped()) {
+                // rest 1 second
                 std::this_thread::sleep_for(std::chrono::microseconds(1000));
             }
 
-            mpTracker->InformOnlyTracking(true);
+            mpTracker->InformOnlyTracking(true); // open tracking mode
             mbActivateLocalizationMode = false;
         }
+        // delocalization
+        // track + localization + mapping
         if(mbDeactivateLocalizationMode)
         {
-            mpTracker->InformOnlyTracking(false);
+            mpTracker->InformOnlyTracking(false); // open tracking thread
             mpLocalMapper->Release();
             mbDeactivateLocalizationMode = false;
         }
@@ -173,15 +182,13 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
     // Check reset
     {
     unique_lock<mutex> lock(mMutexReset);
-    if(mbReset)
-    {
-        mpTracker->Reset();
-        mbReset = false;
-    }
+        if(mbReset) {
+            mpTracker->Reset(); // reset thread
+            mbReset = false;
+        }
     }
 
     cv::Mat Tcw = mpTracker->GrabImageStereo(imLeft,imRight,timestamp);
-
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
@@ -189,8 +196,7 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
     return Tcw;
 }
 
-cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp)
-{
+cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp) {
     if(mSensor!=RGBD)
     {
         cerr << "ERROR: you called TrackRGBD but input sensor was not set to RGBD." << endl;
@@ -240,8 +246,7 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const doub
     return Tcw;
 }
 
-cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp)
-{
+cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp) {
     if(mSensor!=MONOCULAR)
     {
         cerr << "ERROR: you called TrackMonocular but input sensor was not set to Monocular." << endl;
@@ -292,24 +297,20 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp)
     return Tcw;
 }
 
-void System::ActivateLocalizationMode()
-{
+void System::ActivateLocalizationMode() {
     unique_lock<mutex> lock(mMutexMode);
     mbActivateLocalizationMode = true;
 }
 
-void System::DeactivateLocalizationMode()
-{
+void System::DeactivateLocalizationMode() {
     unique_lock<mutex> lock(mMutexMode);
     mbDeactivateLocalizationMode = true;
 }
 
-bool System::MapChanged()
-{
+bool System::MapChanged() {
     static int n=0;
     int curn = mpMap->GetLastBigChangeIdx();
-    if(n<curn)
-    {
+    if(n<curn) {
         n=curn;
         return true;
     }
@@ -317,14 +318,12 @@ bool System::MapChanged()
         return false;
 }
 
-void System::Reset()
-{
+void System::Reset() {
     unique_lock<mutex> lock(mMutexReset);
     mbReset = true;
 }
 
-void System::Shutdown()
-{
+void System::Shutdown() {
     mpLocalMapper->RequestFinish();
     mpLoopCloser->RequestFinish();
     if(mpViewer)
@@ -337,8 +336,7 @@ void System::Shutdown()
     }
 
     // Wait until all thread have effectively stopped
-    while(!mpLocalMapper->isFinished() || !mpLoopCloser->isFinished() || mpLoopCloser->isRunningGBA())
-    {
+    while(!mpLocalMapper->isFinished() || !mpLoopCloser->isFinished() || mpLoopCloser->isRunningGBA()) {
         std::this_thread::sleep_for(std::chrono::microseconds(5000));
     }
     if(mpViewer)
@@ -347,8 +345,7 @@ void System::Shutdown()
         SaveMap(mapfile);
 }
 
-void System::SaveTrajectoryTUM(const string &filename)
-{
+void System::SaveTrajectoryTUM(const string &filename) {
     cout << endl << "Saving camera trajectory to " << filename << " ..." << endl;
     if(mSensor==MONOCULAR)
     {
@@ -407,9 +404,7 @@ void System::SaveTrajectoryTUM(const string &filename)
     cout << endl << "trajectory saved!" << endl;
 }
 
-
-void System::SaveKeyFrameTrajectoryTUM(const string &filename)
-{
+void System::SaveKeyFrameTrajectoryTUM(const string &filename) {
     cout << endl << "Saving keyframe trajectory to " << filename << " ..." << endl;
 
     vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
@@ -444,8 +439,7 @@ void System::SaveKeyFrameTrajectoryTUM(const string &filename)
     cout << endl << "trajectory saved!" << endl;
 }
 
-void System::SaveTrajectoryKITTI(const string &filename)
-{
+void System::SaveTrajectoryKITTI(const string &filename) {
     cout << endl << "Saving camera trajectory to " << filename << " ..." << endl;
     if(mSensor==MONOCULAR)
     {
@@ -499,33 +493,30 @@ void System::SaveTrajectoryKITTI(const string &filename)
     cout << endl << "trajectory saved!" << endl;
 }
 
-int System::GetTrackingState()
-{
+int System::GetTrackingState() {
     unique_lock<mutex> lock(mMutexState);
     return mTrackingState;
 }
 
-vector<MapPoint*> System::GetTrackedMapPoints()
-{
+vector<MapPoint*> System::GetTrackedMapPoints() {
     unique_lock<mutex> lock(mMutexState);
     return mTrackedMapPoints;
 }
 
-vector<cv::KeyPoint> System::GetTrackedKeyPointsUn()
-{
+vector<cv::KeyPoint> System::GetTrackedKeyPointsUn() {
     unique_lock<mutex> lock(mMutexState);
     return mTrackedKeyPointsUn;
 }
 
-void System::SaveMap(const string &filename)
-{
+void System::SaveMap(const string &filename) {
     unique_lock<mutex>MapPointGlobal(MapPoint::mGlobalMutex);
     std::ofstream out(filename, std::ios_base::binary);
-    if (!out)
-    {
+    
+    if (!out) {
         cerr << "Cannot Write to Mapfile: " << mapfile << std::endl;
         exit(-1);
     }
+
     cout << "Saving Mapfile: " << mapfile << std::flush;
     boost::archive::binary_oarchive oa(out, boost::archive::no_header);
     oa << mpMap;
@@ -533,15 +524,16 @@ void System::SaveMap(const string &filename)
     cout << " ...done" << std::endl;
     out.close();
 }
-bool System::LoadMap(const string &filename)
-{
+
+bool System::LoadMap(const string &filename) {
     unique_lock<mutex>MapPointGlobal(MapPoint::mGlobalMutex);
     std::ifstream in(filename, std::ios_base::binary);
-    if (!in)
-    {
+    
+    if (!in) {
         cerr << "Cannot Open Mapfile: " << mapfile << " , You need create it first!" << std::endl;
         return false;
     }
+
     cout << "Loading Mapfile: " << mapfile << std::flush;
     boost::archive::binary_iarchive ia(in, boost::archive::no_header);
     ia >> mpMap;
@@ -562,5 +554,4 @@ bool System::LoadMap(const string &filename)
     in.close();
     return true;
 }
-
 } //namespace ORB_SLAM

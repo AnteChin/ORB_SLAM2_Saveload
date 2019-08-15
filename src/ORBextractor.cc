@@ -824,7 +824,6 @@ void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoin
                         vToDistributeKeys.push_back(*vit);
                     }
                 }
-
             }
         }
 
@@ -960,8 +959,6 @@ void ORBextractor::ComputeKeyPointsOld(std::vector<std::vector<KeyPoint> > &allK
 
             }
         }
-
-
         // Retain by score
 
         while(nToDistribute>0 && nNoMore<nCells)
@@ -1006,7 +1003,6 @@ void ORBextractor::ComputeKeyPointsOld(std::vector<std::vector<KeyPoint> > &allK
                 KeyPointsFilter::retainBest(keysCell,nToRetain[i][j]);
                 if((int)keysCell.size()>nToRetain[i][j])
                     keysCell.resize(nToRetain[i][j]);
-
 
                 for(size_t k=0, kend=keysCell.size(); k<kend; k++)
                 {
@@ -1128,7 +1124,6 @@ void ORBextractor::ComputePyramid(cv::Mat image)
                            BORDER_REFLECT_101);            
         }
     }
-
 }
 
 } //namespace ORB_SLAM

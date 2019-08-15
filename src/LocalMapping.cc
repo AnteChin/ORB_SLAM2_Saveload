@@ -34,18 +34,15 @@ LocalMapping::LocalMapping(Map *pMap, const float bMonocular):
 {
 }
 
-void LocalMapping::SetLoopCloser(LoopClosing* pLoopCloser)
-{
+void LocalMapping::SetLoopCloser(LoopClosing* pLoopCloser) {
     mpLoopCloser = pLoopCloser;
 }
 
-void LocalMapping::SetTracker(Tracking *pTracker)
-{
+void LocalMapping::SetTracker(Tracking *pTracker) {
     mpTracker=pTracker;
 }
 
-void LocalMapping::Run()
-{
+void LocalMapping::Run() {
 
     mbFinished = false;
 

@@ -21,7 +21,6 @@
 #include "ORBmatcher.h"
 
 #include<limits.h>
-
 #include<opencv2/core/core.hpp>
 #include<opencv2/features2d/features2d.hpp>
 
@@ -124,7 +123,6 @@ int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoint
             nmatches++;
         }
     }
-
     return nmatches;
 }
 
@@ -135,7 +133,6 @@ float ORBmatcher::RadiusByViewingCos(const float &viewCos)
     else
         return 4.0;
 }
-
 
 bool ORBmatcher::CheckDistEpipolarLine(const cv::KeyPoint &kp1,const cv::KeyPoint &kp2,const cv::Mat &F12,const KeyFrame* pKF2)
 {
