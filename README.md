@@ -46,6 +46,7 @@ roslaunch zed_wrapper zed.launch
 ```
 3. Open a new Terminal and run in the project directory
 ```bash
-rosrun Drone_SLAM Stereo /home/quadcopterar/Research/Save_Load/Vocabulary/ORBvoc.bin /home/quadcopterar/Research/Save_Load/zedSetting.yaml false
+rosrun Drone_SLAM Stereo /home/quadcopterar/Research/Save_Load/Vocabulary/ORBvoc.bin /home/quadcopterar/Research/Save_Load/zedSetting.yaml false true
 ```
+The last boolean parameter represent if save the map.
 

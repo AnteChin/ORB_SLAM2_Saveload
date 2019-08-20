@@ -38,12 +38,11 @@
 
 #include<opencv2/core/core.hpp>
 
-#include"../../../include/System.h" //please make sure the path if meeting error
+#include"../../../include/System.h" //please make sure the path if errors occur
 
 using namespace std;
 
-class ImageGrabber
-{
+class ImageGrabber {
 public:
     ImageGrabber(ORB_SLAM2::System* pSLAM):mpSLAM(pSLAM){}
 
@@ -54,20 +53,23 @@ public:
     cv::Mat M1l,M2l,M1r,M2r;
 };
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     ros::init(argc, argv, "RGBD");
     ros::start();
 
-    if(argc != 4) {
-        cerr << endl << "Usage: rosrun ORB_SLAM2 Stereo path_to_vocabulary path_to_settings do_rectify save_map" << endl;
+    if(argc != 5) {
+        cerr << endl << "Usage: rosrun Drone_SLAM Stereo path_to_vocabulary path_to_settings do_rectify save_map_or_not" << endl;
         ros::shutdown();
         return 1;
     }    
 
+    bool save_map = false;
+    stringstream save(argv[4]);
+    save >> boolalpha >> save_map;
+
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     // fifth parameter to set save map true
-    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::STEREO, true, true);
+    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::STEREO, true, save_map);
 
     ImageGrabber igb(&SLAM);
 
@@ -101,8 +103,7 @@ int main(int argc, char **argv)
         int cols_r = fsSettings["RIGHT.width"];
 
         if(K_l.empty() || K_r.empty() || P_l.empty() || P_r.empty() || R_l.empty() || R_r.empty() || D_l.empty() || D_r.empty() ||
-                rows_l==0 || rows_r==0 || cols_l==0 || cols_r==0)
-        {
+                rows_l==0 || rows_r==0 || cols_l==0 || cols_r==0) {
             cerr << "ERROR: Calibration parameters to rectify stereo are missing!" << endl;
             return -1;
         }
