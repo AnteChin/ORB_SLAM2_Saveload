@@ -57,19 +57,38 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "RGBD");
     ros::start();
 
-    if(argc != 5) {
-        cerr << endl << "Usage: rosrun Drone_SLAM Stereo path_to_vocabulary path_to_settings do_rectify save_map_or_not" << endl;
+    if(argc != 4) {
+        cerr << endl << "Usage: rosrun Drone_SLAM Stereo path_to_vocabulary path_to_settings do_rectify" << endl;
         ros::shutdown();
         return 1;
-    }    
+    }
 
-    bool save_map = false;
-    stringstream save(argv[4]);
-    save >> boolalpha >> save_map;
+    cout << "************************************"
+         << "*                                  *"
+         << "*    Welcome to use Drone_SLAM     *"
+         << "*                                  *"
+         << "************************************" << endl;
+    
+    bool bLoadMap = false;
+    string type_in;
+    while (1) {
+        cout << "Do you want to load map?(y/n)" << endl;
+        cin >> type_in;
+        if(type_in == "Y" || type_in == "y" || type_in == "yes" || type_in == "Yes"){
+            bLoadMap = true;
+            break;
+        } 
+        else if (type_in == "N" || type_in == "n" || type_in == "No" || type_in == "no") {
+            break;
+        } 
+        else {
+            cout << "Wrong input. Please input again.";
+        }
+    }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     // fifth parameter to set save map true
-    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::STEREO, true, save_map);
+    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::STEREO, true, bLoadMap);
 
     ImageGrabber igb(&SLAM);
 
@@ -126,22 +145,22 @@ int main(int argc, char **argv) {
     SLAM.Shutdown();
 
     // Save camera trajectory
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory_TUM_Format.txt");
-    SLAM.SaveTrajectoryTUM("FrameTrajectory_TUM_Format.txt");
-    SLAM.SaveTrajectoryKITTI("FrameTrajectory_KITTI_Format.txt");
+    // SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory_TUM_Format.txt");
+    // SLAM.SaveTrajectoryTUM("FrameTrajectory_TUM_Format.txt");
+    // SLAM.SaveTrajectoryKITTI("FrameTrajectory_KITTI_Format.txt");
 
     ros::shutdown();
 
     return 0;
 }
 
-void ImageGrabber::GrabStereo(const sensor_msgs::ImageConstPtr& msgLeft,const sensor_msgs::ImageConstPtr& msgRight)
-{
+void ImageGrabber::GrabStereo(const sensor_msgs::ImageConstPtr& msgLeft,const sensor_msgs::ImageConstPtr& msgRight) {
     // Copy the ros image message to cv::Mat.
     cv_bridge::CvImageConstPtr cv_ptrLeft;
     try {
         cv_ptrLeft = cv_bridge::toCvShare(msgLeft);
-    } catch (cv_bridge::Exception& e) {
+    } 
+    catch (cv_bridge::Exception& e) {
         ROS_ERROR("cv_bridge exception: %s", e.what());
         return;
     }
@@ -149,7 +168,8 @@ void ImageGrabber::GrabStereo(const sensor_msgs::ImageConstPtr& msgLeft,const se
     cv_bridge::CvImageConstPtr cv_ptrRight;
     try {
         cv_ptrRight = cv_bridge::toCvShare(msgRight);
-    } catch (cv_bridge::Exception& e) {
+    } 
+    catch (cv_bridge::Exception& e) {
         ROS_ERROR("cv_bridge exception: %s", e.what());
         return;
     }
@@ -160,7 +180,8 @@ void ImageGrabber::GrabStereo(const sensor_msgs::ImageConstPtr& msgLeft,const se
         cv::remap(cv_ptrLeft->image,imLeft,M1l,M2l,cv::INTER_LINEAR);
         cv::remap(cv_ptrRight->image,imRight,M1r,M2r,cv::INTER_LINEAR);
         mpSLAM->TrackStereo(imLeft,imRight,cv_ptrLeft->header.stamp.toSec());
-    } else {
+    } 
+    else {
         mpSLAM->TrackStereo(cv_ptrLeft->image,cv_ptrRight->image,cv_ptrLeft->header.stamp.toSec());
     }
 }

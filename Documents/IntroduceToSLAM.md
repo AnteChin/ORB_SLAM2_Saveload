@@ -102,14 +102,14 @@ If camera is moving, the thread will use motion model to estimate the pose of cu
 These three models are aim to get an aproximate value of camera pose. It will be used in local map to get more match points. And Bundle Adjustment will be used to optimize the pose.
 
 ### Initialization
-Initialization in `Tracking::StereoInitialization()` function. This function is invoked in `Tracking::Track()` function when the thread finds the system didn't initialize.
+Initialization happens in `Tracking::StereoInitialization()` function. This function is invoked in `Tracking::Track()` function when the thread finds the system didn't initialize. 
 
 ORB-SLAM2 contains a file call `Initializer.h`. However, it is only used by Mono camera. Initializations for Mono and Stereo are different and this documentation only introduces Stereo. This is because Mono cannot calculate depth and its scale is uncertain, which means extra computations are needed.
 
 The process in this function is:
 
 1. Find a frame that contians more than 500 key points as the first key frame.
-2. Initialize this frame and set initial pose.
+2. Initialize this frame and set initial pose in function `SetPose`. T = [I 0]. 
 3. Generate the initial KeyFrame `pkFini` based on current frame(KeyFrame are different with Frame).
 4. Insert `pkFini` into the map.
 5. For every key points `i` in current frame:
@@ -134,6 +134,13 @@ Per Frame -> extract ORB feature points -> Position estimation `R` & `t` based o
 > Input: images from left and right sight, timestamp<br> Output: Rotation Matrix for world to camera coordinate 
 
 Converting images to gray, discard all color data. It create a frame based on two gray images from left and right sight, and assign it to `mCurrentFrame`. In function `Track()`, the Rotation Martix will be created and assign to `mCurrentFrame`, and then the function return it.
+
+### Track With Motion Model
+
+> In function `Tracking::TrackWithMotionModel()`
+
+This model estimate that the object's velocity and angle don't change. For the last frame, the pose is the pose to its referrence frame times the pose of its  referrence frame to world coordinate system(the first key frame in program)
+
 
 ## Frame and KeyFrame
 
