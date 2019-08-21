@@ -53,6 +53,15 @@ public:
     cv::Mat M1l,M2l,M1r,M2r;
 };
 
+bool hasEnding (std::string const &fullString, std::string const &ending) {
+    if (fullString.length() >= ending.length()) {
+        return (0 == fullString.compare (fullString.length() - ending.length(), ending.length(), ending));
+    } else {
+        return false;
+    }
+}
+
+
 int main(int argc, char **argv) {
     ros::init(argc, argv, "RGBD");
     ros::start();
@@ -63,11 +72,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    cout << "************************************"
-         << "*                                  *"
-         << "*    Welcome to use Drone_SLAM     *"
-         << "*                                  *"
-         << "************************************" << endl;
+    cout<< "Welcome to use Drone_SLAM!"<< endl;
     
     bool bLoadMap = false;
     string type_in;
@@ -143,6 +148,36 @@ int main(int argc, char **argv) {
 
     // Stop all threads
     SLAM.Shutdown();
+
+    bool bSaveMap = false;
+    type_in.clear();
+    while (1) {
+        cout << endl << "Do you want to save the map?(y/n)" << endl;
+        cin >> type_in;
+        if(type_in == "Y" || type_in == "y" || type_in == "yes" || type_in == "Yes"){
+            bSaveMap = true;
+            break;
+        } 
+        else if (type_in == "N" || type_in == "n" || type_in == "No" || type_in == "no") {
+            break;
+        } 
+        else {
+            cout << "Wrong input. Please input again.";
+        }
+    }
+
+    if (bSaveMap == true) {
+        cout << "Input the name of the MAP" << endl
+             << "the MAP will be saved as a binary file in your current working directory. "
+             << "ex. If your input is zedmap, a MAP file named zedmap.bin will show up." << endl;
+        cout << "Input the MAP's name: ";
+        string name_of_map;
+        cin >> name_of_map;
+        if (!hasEnding(name_of_map, ".bin")) {
+            name_of_map += ".bin";
+        }
+        SLAM.SaveMap(name_of_map);
+    }
 
     // Save camera trajectory
     // SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory_TUM_Format.txt");

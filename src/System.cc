@@ -341,8 +341,9 @@ void System::Shutdown() {
     }
     if(mpViewer)
         pangolin::BindToContext("ORB-SLAM2: Map Viewer");
-    if (is_save_map)
-        SaveMap(mapfile);
+
+    // if (is_save_map)
+    //     SaveMap(mapfile);
 }
 
 void System::SaveTrajectoryTUM(const string &filename) {
@@ -517,7 +518,7 @@ void System::SaveMap(const string &filename) {
         exit(-1);
     }
 
-    cout << "Saving Mapfile: " << mapfile << std::flush;
+    cout << "Saving Mapfile: " << filename << std::flush;
     boost::archive::binary_oarchive oa(out, boost::archive::no_header);
     oa << mpMap;
     oa << mpKeyFrameDatabase;

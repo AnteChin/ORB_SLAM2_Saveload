@@ -51,10 +51,8 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
     mvMatches12.clear();
     mvMatches12.reserve(mvKeys2.size());
     mvbMatched1.resize(mvKeys1.size());
-    for(size_t i=0, iend=vMatches12.size();i<iend; i++)
-    {
-        if(vMatches12[i]>=0)
-        {
+    for(size_t i=0, iend=vMatches12.size();i<iend; i++) {
+        if(vMatches12[i]>=0) {
             mvMatches12.push_back(make_pair(i,vMatches12[i]));
             mvbMatched1[i]=true;
         }
@@ -69,8 +67,7 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
     vAllIndices.reserve(N);
     vector<size_t> vAvailableIndices;
 
-    for(int i=0; i<N; i++)
-    {
+    for(int i=0; i<N; i++) {
         vAllIndices.push_back(i);
     }
 
@@ -84,8 +81,7 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
         vAvailableIndices = vAllIndices;
 
         // Select a minimum set
-        for(size_t j=0; j<8; j++)
-        {
+        for(size_t j=0; j<8; j++) {
             int randi = DUtils::Random::RandomInt(0,vAvailableIndices.size()-1);
             int idx = vAvailableIndices[randi];
 

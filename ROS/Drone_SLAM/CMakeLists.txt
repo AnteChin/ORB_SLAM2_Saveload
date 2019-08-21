@@ -67,10 +67,4 @@ src/ros_stereo.cc
 target_link_libraries(Stereo
 ${LIBS}
 )
-rosbuild_add_executable(Test
-src/ros_test.cc
-)
 
-target_link_libraries(Test
-${LIBS}
-)

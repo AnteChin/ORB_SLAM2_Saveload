@@ -13,15 +13,21 @@
 * 第二个是更新该地图点平均观测方向与观测距离的范围，这些都是为了后面做描述子融合做准备。
 * pNewMP->UpdateNormalAndDepth();
 * 
-* 跟踪
-* 每一帧图像 Frame ---> 提取ORB关键点特征 -----> 根据上一帧进行位置估计计算R t (或者通过全局重定位初始化位置)
-* ------> 跟踪局部地图，优化位姿 -------> 是否加入 关键帧
+1. 模式变换的检测  跟踪+定位  or  跟踪+定位+建图
+2. 检查跟踪tracking线程重启
+3. 双目跟踪
+   mpTracker->GrabImageStereo(imLeft,imRight,timestamp); // Tracking.cc中
+   // 图像转换成灰度图，创建帧Frame对象(orb特征提取器,分块特征匹配，视差计算深度)
+   // 使用Track()进行跟踪:
+         0. 双目初始化(最开始执行) StereoInitialization();// 双目 / 深度初始化
+         a. 两帧跟踪得到初始化位姿(跟踪上一帧/跟踪参考帧/重定位)
+         b. 跟踪局部地图，多帧局部地图G2O优化位姿, 新建关键帧
 * 
 * Tracking线程
 * 帧 Frame
 * 1】初始化
 *       单目初始化 MonocularInitialization()
-*       双目初始化 StereoInitialization
+*       双目初始化 StereoInitialization()
 * 
 * 2】相机位姿跟踪P
 *       同时跟踪和定位，不插入关键帧，局部建图 不工作
@@ -324,10 +330,7 @@ Tracking involes three model:
 
 【1】运动模型 跟踪（Tracking with motion model）
         跟踪上一帧的地图点
-        
-        上一帧的地图点 反投影到当前帧图像像素坐标上  和 当前帧的 关键点落在 同一个 格子内的 
-        做描述子匹配 搜索 可以加快匹配
-        
+        上一帧的地图点 反投影到当前帧图像像素坐标上. 和当前帧的关键点落在同一个格子内的做描述子匹配搜索  
 	假设物体处于匀速运动，那么可以用上一帧的位姿和速度来估计当前帧的位姿。
 	这个模型适用于运动速度和方向比较一致，没有大转动的情形下，比如匀速运动的汽车、机器人、人等。
 	而对于运动比较随意的目标，当然就会失效了。此时就要用到下面两个模型。
@@ -335,12 +338,12 @@ Tracking involes three model:
 	假如motion model已经失效，那么首先可以尝试和最近一个关键帧去做匹配(匹配关键帧中的地图点)。
 	作者利用了bag of words（BoW）来加速匹配。
 	
-	关键帧和当前帧 均用 字典单词线性表示向量
+	关键帧和当前帧均用字典单词线性表示向量
         对应单词的 描述子 肯定比较相近,取对应单词的描述子进行匹配可以加速匹配
         
-	首先，计算当前帧的BoW，并设定初始位姿为上一帧的位姿；
-	其次，根据位姿和BoW词典来寻找特征匹配（参见ORB－SLAM（六）回环检测）；
-	最后，利用匹配的特征优化位姿（参见ORB－SLAM（五）优化）。
+	首先，计算当前帧的BoW，并设定初始位姿为上一帧的位姿
+	其次，根据位姿和BoW词典来寻找特征匹配
+	最后，利用匹配的特征优化位姿
 【3】重定位（Relocalization） 跟踪
        当前帧 用词典计算 字典单词线性表示向量
        所有关键帧 用词典计算 字典单词线性表示向量
@@ -353,25 +356,18 @@ Tracking involes three model:
        
       假如当前帧与最近邻关键帧的匹配也失败了，意味着此时当前帧已经丢了，无法确定其真实位置。
       此时，只有去和所有关键帧匹配，看能否找到合适的位置。首先，计算当前帧的Bow向量。
-      其次，利用BoW词典选取若干关键帧作为备选（参见ORB－SLAM（六）回环检测）；
+      其次，利用BoW词典选取若干关键帧作为备选
       再次，寻找有足够多的特征点匹配的关键帧；最后，利用特征点匹配迭代求解位姿（RANSAC框架下，
-      因为相对位姿可能比较大，局外点会比较多）。
-      如果有关键帧有足够多的内点，那么选取该关键帧优化出的位姿。
+      因为相对位姿可能比较大，局外点会比较多）
+      如果有关键帧有足够多的内点，那么选取该关键帧优化出的位姿
 
-　1）优先选择通过恒速运动模型，从LastFrame（上一普通帧）
-　      直接预测出（乘以一个固定的位姿变换矩阵）当前帧的姿态；
-    2）如果是静止状态或者运动模型匹配失效
-	  （运用恒速模型后反投影发现LastFrame的地图点和CurrentFrame的特征点匹配很少），
-	  通过增大参考帧的地图点反投影匹配范围，获取较多匹配后，计算当前位姿；
-    3）若这两者均失败，即代表tracking失败，mState!=OK，
-	  则在KeyFrameDataBase中用Bow搜索CurrentFrame的特征点匹配，
-	  进行全局重定位GlobalRelocalization，在RANSAC框架下使用EPnP求解当前位姿。  
-	  
-      
-      一旦我们通过上面三种模型获取了初始的相机位姿和初始的特征匹配，
-      就可以将完整的地图投影到当前帧中去搜索更多的匹配。但是投影完整的地图，
-      在large scale的场景中是很耗计算而且也没有必要的，
-      因此，这里使用了局部地图LocalMap来进行投影匹配。
+1）优先选择通过恒速运动模型，从LastFrame（上一普通帧）直接预测出（乘以一个固定的位姿变换矩阵）当前帧的姿态
+2）如果是静止状态或者运动模型匹配失效
+（运用恒速模型后反投影发现LastFrame的地图点和CurrentFrame的特征点匹配很少），
+通过增大参考帧的地图点反投影匹配范围，获取较多匹配后，计算当前位姿；
+3）若这两者均失败，即代表tracking失败，mState!=OK，
+    则在KeyFrameDataBase中用Bow搜索CurrentFrame的特征点匹配，
+	进行全局重定位GlobalRelocalization，在RANSAC框架下使用EPnP求解当前位姿。  
     
 LocalMap包含：
     与当前帧相连的关键帧K1，以及与K1相连的关键帧K2（一级二级相连关键帧）；
@@ -607,20 +603,24 @@ void Tracking::Track() {
     }
 }
 
-// 设置第一帧为关键帧, 位姿为 [I 0] 
-// 根据第一帧视差求得的深度, 计算3D点
-// 生成地图, 添加地图点. 地图点观测帧, 地图点最好的描述子, 更新地图点的方向和距离 
-// 关键帧的地图点, 当前帧添加地图点, 地图添加地图点
+/*步骤：
+	当前帧特征点个数大于500, 进行初始化
+	设置第一帧为关键帧，并设置为位姿为 T = [I 0]，世界坐标系 
+	创建关键帧，地图添加关键帧，
+	根据每一个2d点的视差（左右两张图像，orb特征点金字塔分层分块匹配得到视差d）求得的深度D=fB/d，计算对应的3D点，并创建地图点，
+	地图点关联观测帧 地图点计算所有关键帧中最好的描述子并更新地图点的方向和距离，
+	关键帧关联地图点，地当前帧添加地图点  地图添加地图点
+	局部地图中添加该初始关键帧。
+*/
 // Initialization for rgbd and stereo
 // it creates MapPoints directly since it has depth info
 void Tracking::StereoInitialization() {
     // 1. Find a frame that contians more than 500 key pints as the first key frame.
     if(mCurrentFrame.N>500) {
-        // 2. Set Frame pose to the origin
+        // 2. Set Frame pose to the T = [I 0], and set the world coordinate system
         mCurrentFrame.SetPose(cv::Mat::eye(4,4,CV_32F));
 
         // 3. Generate the initial KeyFrame based on current frame
-        // Create KeyFrame
         KeyFrame* pKFini = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
         
         // 4. Insert KeyFrame pkFini in the map
@@ -628,7 +628,6 @@ void Tracking::StereoInitialization() {
 
         // Create MapPoints and asscoiate to KeyFrame
         // mCurrentFrame.N = number of key points in this KeyFrame
-        // 步骤4：为每个特征点构造MapPoint		
         for(int i=0; i<mCurrentFrame.N;i++) { // for every key point in this frame
             float z = mCurrentFrame.mvDepth[i]; // corresponding depth info 
             if(z>0) {
@@ -646,7 +645,7 @@ void Tracking::StereoInitialization() {
                 // 从众多观测到该MapPoint的特征点中挑选区分读最高的描述子
                 pNewMP->ComputeDistinctiveDescriptors();
                 // 更新该MapPoint平均观测方向以及观测距离的范围
-			    // 该地图点平均观测方向与观测距离的范围，这些都是为了后面做描述子融合做准备
+			    // 该地图点平均观测方向与观测距离的范围
                 pNewMP->UpdateNormalAndDepth();
                 // 步骤4.4：在地图中添加该MapPoint
                 mpMap->AddMapPoint(pNewMP);
@@ -701,8 +700,7 @@ void Tracking::MonocularInitialization() {
             return;
         }
     }
-    else
-    {
+    else {
         // Try to initialize
         if((int)mCurrentFrame.mvKeys.size()<=100)
         {
@@ -915,8 +913,11 @@ bool Tracking::TrackReferenceKeyFrame()
     return nmatchesMap>=10;
 }
 
-void Tracking::UpdateLastFrame()
-{
+// 上一帧位姿 = 上一帧到其参考帧位姿*其参考帧到世界坐标系(系统第一帧)位姿
+// For the last frame, 
+// the pose is the pose to its referrence frame 
+// times the pose of its referrence frame to world coordinate system(the first key frame in program)
+void Tracking::UpdateLastFrame() {
     // Update pose according to reference keyframe
     KeyFrame* pRef = mLastFrame.mpReferenceKF;
     cv::Mat Tlr = mlRelativeFramePoses.back();
@@ -930,11 +931,9 @@ void Tracking::UpdateLastFrame()
     // We sort points according to their measured depth by the stereo/RGB-D sensor
     vector<pair<float,int> > vDepthIdx;
     vDepthIdx.reserve(mLastFrame.N);
-    for(int i=0; i<mLastFrame.N;i++)
-    {
+    for(int i=0; i<mLastFrame.N;i++) {
         float z = mLastFrame.mvDepth[i];
-        if(z>0)
-        {
+        if(z>0) {
             vDepthIdx.push_back(make_pair(z,i));
         }
     }
@@ -947,8 +946,7 @@ void Tracking::UpdateLastFrame()
     // We insert all close points (depth<mThDepth)
     // If less than 100 close points, we insert the 100 closest ones.
     int nPoints = 0;
-    for(size_t j=0; j<vDepthIdx.size();j++)
-    {
+    for(size_t j=0; j<vDepthIdx.size();j++) {
         int i = vDepthIdx[j].second;
 
         bool bCreateNew = false;
@@ -956,13 +954,11 @@ void Tracking::UpdateLastFrame()
         MapPoint* pMP = mLastFrame.mvpMapPoints[i];
         if(!pMP)
             bCreateNew = true;
-        else if(pMP->Observations()<1)
-        {
+        else if(pMP->Observations()<1) {
             bCreateNew = true;
         }
 
-        if(bCreateNew)
-        {
+        if(bCreateNew) {
             cv::Mat x3D = mLastFrame.UnprojectStereo(i);
             MapPoint* pNewMP = new MapPoint(x3D,mpMap,&mLastFrame,i);
 
@@ -971,8 +967,7 @@ void Tracking::UpdateLastFrame()
             mlpTemporalPoints.push_back(pNewMP);
             nPoints++;
         }
-        else
-        {
+        else {
             nPoints++;
         }
 
@@ -981,8 +976,10 @@ void Tracking::UpdateLastFrame()
     }
 }
 
-bool Tracking::TrackWithMotionModel()
-{
+/*
+    用上一帧的位姿和速度来估计当前帧的位姿
+*/
+bool Tracking::TrackWithMotionModel() {
     ORBmatcher matcher(0.9,true);
 
     // Update last frame pose according to its reference keyframe
@@ -1002,8 +999,7 @@ bool Tracking::TrackWithMotionModel()
     int nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,th,mSensor==System::MONOCULAR);
 
     // If few matches, uses a wider window search
-    if(nmatches<20)
-    {
+    if(nmatches<20) {
         fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
         nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,2*th,mSensor==System::MONOCULAR);
     }
@@ -1016,12 +1012,9 @@ bool Tracking::TrackWithMotionModel()
 
     // Discard outliers
     int nmatchesMap = 0;
-    for(int i =0; i<mCurrentFrame.N; i++)
-    {
-        if(mCurrentFrame.mvpMapPoints[i])
-        {
-            if(mCurrentFrame.mvbOutlier[i])
-            {
+    for(int i =0; i<mCurrentFrame.N; i++) {
+        if(mCurrentFrame.mvpMapPoints[i]) {
+            if(mCurrentFrame.mvbOutlier[i]) {
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
 
                 mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
@@ -1035,8 +1028,7 @@ bool Tracking::TrackWithMotionModel()
         }
     }    
 
-    if(mbOnlyTracking)
-    {
+    if(mbOnlyTracking) {
         mbVO = nmatchesMap<10;
         return nmatches>20;
     }
