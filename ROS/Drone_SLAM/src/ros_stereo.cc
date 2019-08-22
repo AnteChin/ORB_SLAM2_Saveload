@@ -73,27 +73,10 @@ int main(int argc, char **argv) {
     }
 
     cout<< "Welcome to use Drone_SLAM!"<< endl;
-    
-    bool bLoadMap = false;
-    string type_in;
-    while (1) {
-        cout << "Do you want to load map?(y/n)" << endl;
-        cin >> type_in;
-        if(type_in == "Y" || type_in == "y" || type_in == "yes" || type_in == "Yes"){
-            bLoadMap = true;
-            break;
-        } 
-        else if (type_in == "N" || type_in == "n" || type_in == "No" || type_in == "no") {
-            break;
-        } 
-        else {
-            cout << "Wrong input. Please input again.";
-        }
-    }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     // fifth parameter to set save map true
-    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::STEREO, true, bLoadMap);
+    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::STEREO, true);
 
     ImageGrabber igb(&SLAM);
 
@@ -150,7 +133,7 @@ int main(int argc, char **argv) {
     SLAM.Shutdown();
 
     bool bSaveMap = false;
-    type_in.clear();
+    string type_in;
     while (1) {
         cout << endl << "Do you want to save the map?(y/n)" << endl;
         cin >> type_in;

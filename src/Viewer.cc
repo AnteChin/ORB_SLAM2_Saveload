@@ -138,8 +138,7 @@ void Viewer::Run()
         cv::imshow("ORB-SLAM2: Current Frame",im);
         cv::waitKey(mT);
 
-        if(menuReset)
-        {
+        if(menuReset) {
             menuShowGraph = true;
             menuShowKeyFrames = true;
             menuShowPoints = true;
@@ -149,14 +148,13 @@ void Viewer::Run()
             bLocalizationMode = false;
             bFollow = true;
             menuFollowCamera = true;
+            mpSystem->SaveMap("Temp.bin");
             mpSystem->Reset();
             menuReset = false;
         }
 
-        if(Stop())
-        {
-            while(isStopped())
-            {
+        if(Stop()) {
+            while(isStopped()) {
                 std::this_thread::sleep_for(std::chrono::microseconds(3000));
             }
         }
